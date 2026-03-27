@@ -6,34 +6,22 @@ pub enum Element {
     /// 通常テキスト。
     Text(String),
     /// 色変更（`<#...>`）。
-    Color {
-        code: ColorType,
-    },
+    Color { code: ColorType },
     /// 文字サイズ変更（`<s...>`）。
     Size {
         size: ScalarValue,
         font: Option<String>,
-        bold: bool,
-        italic: bool,
-        strikethrough: bool,
+        decoration: Option<TextDecoration>,
         outline_size: Option<f64>,
     },
     /// フォント変更（`<@...>`）。
-    Font {
-        name: String,
-    },
+    Font { name: String },
     /// 表示速度変更（`<r...>`）。
-    Speed {
-        speed: Option<f64>,
-    },
+    Speed { speed: Option<f64> },
     /// 表示の一時停止（`<w...>`）。
-    Wait {
-        time: TimeValue,
-    },
+    Wait { time: TimeValue },
     /// 表示のクリア（`<c...>`）。
-    Clear {
-        time: TimeValue,
-    },
+    Clear { time: TimeValue },
     /// 位置変更（`<p...>`）。
     Position {
         x: AxisValue,
@@ -41,9 +29,14 @@ pub enum Element {
         z: Option<AxisValue>,
     },
     /// スクリプト実行（`<?...?>`）。
-    Script {
-        code: String,
-    },
+    Script { code: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextDecoration {
+    pub bold: bool,
+    pub italic: bool,
+    pub strikethrough: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,16 +92,26 @@ impl std::fmt::Display for Element {
         match self {
             Self::Text(value) => write!(f, "{}", value),
             Self::Color { code } => write!(f, "<#{}>", code),
-            Self::Size { size, font, bold, italic, strikethrough, outline_size } => {
+            Self::Size {
+                size,
+                decoration,
+                font,
+                outline_size,
+            } => {
                 write!(f, "<s{}", size)?;
-                let has_decoration = *bold || *italic || *strikethrough;
-                if font.is_some() || has_decoration || outline_size.is_some() {
-                    write!(f, ",{}", font.as_deref().unwrap_or(""))?;
-                    if has_decoration || outline_size.is_some() {
+                if let Some(font) = font {
+                    write!(f, ",{}", font)?;
+                    if let Some(decoration) = decoration {
                         let mut deco = String::new();
-                        if *bold { deco.push('B'); }
-                        if *italic { deco.push('I'); }
-                        if *strikethrough { deco.push('S'); }
+                        if decoration.bold {
+                            deco.push('B');
+                        }
+                        if decoration.italic {
+                            deco.push('I');
+                        }
+                        if decoration.strikethrough {
+                            deco.push('S');
+                        }
                         write!(f, ",{}", deco)?;
                         if let Some(outline) = outline_size {
                             write!(f, ",{}", trim_float(*outline))?;
@@ -454,12 +457,29 @@ fn parse_size_element(body: &str) -> Element {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
-    let decoration = parts.next().unwrap_or_default();
-    let bold = decoration.contains('B');
-    let italic = decoration.contains('I');
-    let strikethrough = decoration.contains('S');
+    let decoration = parts.next().map(|s| {
+        let mut deco = TextDecoration {
+            bold: false,
+            italic: false,
+            strikethrough: false,
+        };
+        for c in s.chars() {
+            match c {
+                'B' => deco.bold = true,
+                'I' => deco.italic = true,
+                'S' => deco.strikethrough = true,
+                _ => {}
+            }
+        }
+        deco
+    });
     let outline_size = parts.next().and_then(|s| s.trim().parse::<f64>().ok());
-    Element::Size { size, font, bold, italic, strikethrough, outline_size }
+    Element::Size {
+        size,
+        font,
+        decoration,
+        outline_size,
+    }
 }
 
 fn parse_position_element(body: &str) -> Element {
@@ -630,9 +650,7 @@ mod tests {
             vec![Element::Size {
                 size: ScalarValue::Absolute(32.0),
                 font: None,
-                bold: false,
-                italic: false,
-                strikethrough: false,
+                decoration: None,
                 outline_size: None,
             }]
         );
@@ -646,9 +664,7 @@ mod tests {
             vec![Element::Size {
                 size: ScalarValue::Default,
                 font: None,
-                bold: false,
-                italic: false,
-                strikethrough: false,
+                decoration: None,
                 outline_size: None,
             }]
         );
@@ -662,9 +678,7 @@ mod tests {
             vec![Element::Size {
                 size: ScalarValue::Absolute(72.0),
                 font: Some("メイリオ".to_string()),
-                bold: false,
-                italic: false,
-                strikethrough: false,
+                decoration: None,
                 outline_size: None,
             }]
         );
@@ -678,9 +692,11 @@ mod tests {
             vec![Element::Size {
                 size: ScalarValue::Absolute(72.0),
                 font: Some("メイリオ".to_string()),
-                bold: true,
-                italic: true,
-                strikethrough: false,
+                decoration: Some(TextDecoration {
+                    bold: true,
+                    italic: true,
+                    strikethrough: false,
+                }),
                 outline_size: None,
             }]
         );
@@ -694,9 +710,11 @@ mod tests {
             vec![Element::Size {
                 size: ScalarValue::Absolute(72.0),
                 font: Some("メイリオ".to_string()),
-                bold: true,
-                italic: true,
-                strikethrough: false,
+                decoration: Some(TextDecoration {
+                    bold: true,
+                    italic: true,
+                    strikethrough: false,
+                }),
                 outline_size: Some(4.0),
             }]
         );
@@ -710,9 +728,11 @@ mod tests {
             vec![Element::Size {
                 size: ScalarValue::Absolute(32.0),
                 font: None,
-                bold: false,
-                italic: false,
-                strikethrough: true,
+                decoration: Some(TextDecoration {
+                    bold: false,
+                    italic: false,
+                    strikethrough: true,
+                }),
                 outline_size: None,
             }]
         );
@@ -726,9 +746,7 @@ mod tests {
             vec![Element::Size {
                 size: ScalarValue::RelativeAdd(10.0),
                 font: None,
-                bold: false,
-                italic: false,
-                strikethrough: false,
+                decoration: None,
                 outline_size: None,
             }]
         );
@@ -742,9 +760,7 @@ mod tests {
             vec![Element::Size {
                 size: ScalarValue::RelativeMul(1.5),
                 font: None,
-                bold: false,
-                italic: false,
-                strikethrough: false,
+                decoration: None,
                 outline_size: None,
             }]
         );
@@ -925,9 +941,11 @@ mod tests {
             Element::Size {
                 size: ScalarValue::Absolute(1.0),
                 font: Some("2".to_string()),
-                bold: true,
-                italic: true,
-                strikethrough: false,
+                decoration: Some(TextDecoration {
+                    bold: true,
+                    italic: true,
+                    strikethrough: false,
+                }),
                 outline_size: None,
             },
             Element::Speed { speed: Some(0.5) },
@@ -955,9 +973,7 @@ mod tests {
             Element::Size {
                 size: ScalarValue::Absolute(32.0),
                 font: None,
-                bold: false,
-                italic: false,
-                strikethrough: false,
+                decoration: None,
                 outline_size: None,
             },
             Element::Font {
