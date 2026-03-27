@@ -62,7 +62,6 @@ pub enum ScalarValue {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TimeValue {
-    Default,
     Absolute(f64),
     PerChar(f64),
 }
@@ -172,7 +171,7 @@ impl std::fmt::Display for ScalarValue {
 impl std::fmt::Display for TimeValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Default => Ok(()),
+            Self::Absolute(v) if *v == 0.0 => Ok(()),
             Self::Absolute(v) => write!(f, "{}", trim_float(*v)),
             Self::PerChar(v) => write!(f, "*{}", trim_float(*v)),
         }
@@ -433,7 +432,7 @@ fn parse_optional_f64(token: &str) -> Option<f64> {
 
 fn parse_time_value(token: &str) -> TimeValue {
     if token.is_empty() {
-        return TimeValue::Default;
+        return TimeValue::Absolute(0.0);
     }
     if let Some(value) = token.strip_prefix('*') {
         return TimeValue::PerChar(value.parse::<f64>().unwrap_or(0.0));
@@ -836,7 +835,7 @@ mod tests {
         assert_eq!(
             result,
             vec![Element::Clear {
-                time: TimeValue::Default
+                time: TimeValue::Absolute(0.0)
             }]
         );
     }
