@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.aviutl2.jp)",
+      "Bash(cargo check:*)"
+    ]
+  }
+}
