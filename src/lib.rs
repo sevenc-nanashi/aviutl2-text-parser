@@ -29,7 +29,7 @@ pub enum Element {
         z: Option<AxisValue>,
     },
     /// スクリプト実行（`<?...?>`）。
-    Script { code: String },
+    Script { code: Code },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,6 +50,18 @@ pub enum ColorType {
 pub enum ColorValue {
     Rgb(u8, u8, u8),
     Preset(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Code {
+    pub kind: CodeType,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CodeType {
+    Full,
+    Value,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -133,7 +145,7 @@ impl std::fmt::Display for Element {
                 }
                 write!(f, ">")
             }
-            Self::Script { code } => write!(f, "<?{}?>", code),
+            Self::Script { code } => write!(f, "{}", code),
         }
     }
 }
@@ -153,6 +165,15 @@ impl std::fmt::Display for ColorValue {
         match self {
             Self::Rgb(r, g, b) => write!(f, "{:02x}{:02x}{:02x}", r, g, b),
             Self::Preset(name) => write!(f, "{}", name),
+        }
+    }
+}
+
+impl std::fmt::Display for Code {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.kind {
+            CodeType::Full => write!(f, "<?{}?>", self.value),
+            CodeType::Value => write!(f, "<?={}?>", self.value),
         }
     }
 }
@@ -379,9 +400,23 @@ fn parse_control_element(next: char, control_sequence: String) -> Element {
         },
         'p' => parse_position_element(body),
         '?' => Element::Script {
-            code: body.to_string(),
+            code: parse_code(body),
         },
         _ => Element::Text(control_sequence),
+    }
+}
+
+fn parse_code(body: &str) -> Code {
+    if let Some(value) = body.strip_prefix('=') {
+        return Code {
+            kind: CodeType::Value,
+            value: value.to_string(),
+        };
+    }
+
+    Code {
+        kind: CodeType::Full,
+        value: body.to_string(),
     }
 }
 
@@ -911,7 +946,10 @@ mod tests {
         assert_eq!(
             result,
             vec![Element::Script {
-                code: "obj.rz=obj.time*360".to_string()
+                code: Code {
+                    kind: CodeType::Full,
+                    value: "obj.rz=obj.time*360".to_string(),
+                }
             }]
         );
     }
@@ -922,7 +960,10 @@ mod tests {
         assert_eq!(
             result,
             vec![Element::Script {
-                code: r#"=string.format("%02d:%02d",obj.time/60,obj.time%60)"#.to_string()
+                code: Code {
+                    kind: CodeType::Value,
+                    value: r#"string.format("%02d:%02d",obj.time/60,obj.time%60)"#.to_string(),
+                }
             }]
         );
     }
@@ -991,7 +1032,10 @@ mod tests {
                 z: None,
             },
             Element::Script {
-                code: "obj.rz=1".to_string(),
+                code: Code {
+                    kind: CodeType::Full,
+                    value: "obj.rz=1".to_string(),
+                },
             },
         ];
         let result = parse_text(input);
